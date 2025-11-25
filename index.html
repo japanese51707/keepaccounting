@@ -240,13 +240,21 @@ const analytics = getAnalytics(app);
         }
     });
 
-function login() { 
-    // 加入 catch 來捕捉錯誤並顯示出來
-    auth.signInWithRedirect(new firebase.auth.GoogleAuthProvider())
-        .catch(function(error) {
-            alert("錯誤代碼: " + error.code + "\n錯誤訊息: " + error.message);
-        });
+function login() {
+    // 改用 signInWithRedirect (轉址登入)
+    auth.signInWithRedirect(new firebase.auth.GoogleAuthProvider());
 }
+
+// 並且，為了確保登入失敗時你知道原因，請在下方監聽登入結果 (這段加在 login 函式下面即可)
+auth.getRedirectResult().then((result) => {
+    if (result.user) {
+        // 登入成功，onAuthStateChanged 會自動處理，這裡不用做事
+        console.log("登入成功");
+    }
+}).catch((error) => {
+    // 如果失敗，會跳出視窗告訴你原因
+    alert("登入錯誤：" + error.message);
+});
     function logout() { if(confirm("登出？")) auth.signOut(); }
 
     // 2. 資料庫即時監聽 (核心功能)
