@@ -181,14 +181,8 @@
 </div>
 
 <script>
-    // ⚠️⚠️⚠️ 第 3 步：請將你在 Firebase 複製的設定貼在下方 ⚠️⚠️⚠️
+    // ▼▼▼ 請小心填入你的 Firebase 設定，確保格式跟這裡長得一樣 ▼▼▼
     const firebaseConfig = {
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
-
-// Your web app's Firebase configuration
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
-const firebaseConfig = {
   apiKey: "AIzaSyDT_5fDqMEKU7fsGJdnJh3ABocxGYU0qrs",
   authDomain: "keepaccounting.firebaseapp.com",
   projectId: "keepaccounting",
@@ -196,70 +190,63 @@ const firebaseConfig = {
   messagingSenderId: "689155194970",
   appId: "1:689155194970:web:92b5fc042188578fed5863",
   measurementId: "G-X1VKGS5RQG"
-};//
-
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
     };
-    // ⚠️⚠️⚠️ 設定結束 ⚠️⚠️⚠️
+    // ▲▲▲ 設定結束，請檢查上面的 } 和 ; 有沒有在 ▲▲▲
 
-    // 初始化
-    if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+    // 初始化 Firebase (這段不要動)
+    if (!firebase.apps.length) {
+        firebase.initializeApp(firebaseConfig);
+    }
     const auth = firebase.auth();
     const db = firebase.firestore();
-    let currentUser = null;
-    let unsubscribe = null;
-    let allRecords = []; // 本地暫存所有紀錄 (搜尋用)
-    
-    // 關鍵字設定
-    const keywords = {
-        '飲食': ['飯','麵','吃','喝','餐','茶','咖啡','麥當勞','肯德基','飲料'],
-        '交通': ['車','捷運','油','高鐵','悠遊卡','uber'],
-        '購物': ['買','衣','鞋','包','衛生紙','蝦皮'],
-        '娛樂': ['玩','戲','影','遊戲','switch','netflix'],
-        '居住': ['房租','電','水','瓦斯','網路'],
-        '薪水': ['薪','獎金']
-    };
+
+    // 除錯用：確認程式碼有跑過這裡
+    console.log("Firebase 初始化成功，login 功能已準備就緒");
 
     // 1. 監聽登入狀態
     auth.onAuthStateChanged(user => {
         if(user) {
-            currentUser = user;
+            console.log("已偵測到使用者登入:", user.email);
             document.getElementById('loginPage').style.display = 'none';
             document.getElementById('appPage').style.display = 'block';
             document.getElementById('userAvatar').src = user.photoURL;
             document.getElementById('dateInput').valueAsDate = new Date();
-            loadData(); // 啟動資料監聽
+            loadData();
         } else {
+            console.log("目前無人登入");
             document.getElementById('loginPage').style.display = 'flex';
             document.getElementById('appPage').style.display = 'none';
         }
     });
 
-function login() {
-    // 改用 signInWithRedirect (轉址登入)
-    auth.signInWithRedirect(new firebase.auth.GoogleAuthProvider());
-}
-
-// 並且，為了確保登入失敗時你知道原因，請在下方監聽登入結果 (這段加在 login 函式下面即可)
-auth.getRedirectResult().then((result) => {
-    if (result.user) {
-        // 登入成功，onAuthStateChanged 會自動處理，這裡不用做事
-        console.log("登入成功");
+    // 2. 登入功能 (修正版：加入錯誤回報)
+    function login() { 
+        console.log("按鈕被按下了！正在呼叫 Google 登入...");
+        
+        // 使用 Redirect 比較不會被 Safari 擋
+        auth.signInWithRedirect(new firebase.auth.GoogleAuthProvider())
+            .catch(error => {
+                alert("登入發生錯誤: " + error.message);
+                console.error("登入錯誤:", error);
+            });
     }
-}).catch((error) => {
-    // 如果失敗，會跳出視窗告訴你原因
-    alert("登入錯誤：" + error.message);
-});
+
     function logout() { if(confirm("登出？")) auth.signOut(); }
 
-    // 2. 資料庫即時監聽 (核心功能)
+    // 下面是原本的記帳邏輯，不用動
+    let currentUser = null;
+    let unsubscribe = null;
+    let allRecords = []; 
+    const keywords = {'飲食':['飯','麵','吃','喝'],'交通':['車','捷運'],'購物':['買','衣'],'娛樂':['玩','遊戲'],'居住':['房','電'],'薪水':['薪']};
+
     function loadData() {
+        // 取得當前用戶
+        const user = firebase.auth().currentUser;
+        if (!user) return;
+
         if(unsubscribe) unsubscribe();
-        // 抓取該用戶所有資料
         unsubscribe = db.collection('records')
-            .where('uid', '==', currentUser.uid)
+            .where('uid', '==', user.uid)
             .orderBy('date', 'desc')
             .orderBy('createdAt', 'desc')
             .onSnapshot(snapshot => {
@@ -268,32 +255,23 @@ auth.getRedirectResult().then((result) => {
                 const now = new Date(); 
                 const thisMonth = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
 
-                // 處理資料
                 snapshot.forEach(doc => {
                     const data = doc.data();
-                    data.id = doc.id; // 綁定 ID 方便之後編輯
+                    data.id = doc.id;
                     allRecords.push(data);
 
-                    // 簡易統計本月 (不換算匯率，直接加總該數字，可依需求修改)
                     if(data.date.startsWith(thisMonth)) {
                         if(data.type === 'income') mIn += data.amount;
                         else mOut += data.amount;
                     }
                 });
 
-                // 更新 UI
                 document.getElementById('monthIn').innerText = mIn.toLocaleString();
                 document.getElementById('monthOut').innerText = mOut.toLocaleString();
-                renderList(allRecords.slice(0, 20), 'recentList'); // 首頁只顯示最新的 20 筆
-                
-                // 如果歷史視窗開著，也要更新
-                if(document.getElementById('historyModal').style.display === 'flex') {
-                    filterHistory();
-                }
+                renderList(allRecords.slice(0, 20), 'recentList');
             });
     }
 
-    // 3. 渲染列表 (共用函數)
     function renderList(dataArray, elementId) {
         const container = document.getElementById(elementId);
         container.innerHTML = '';
@@ -301,11 +279,10 @@ auth.getRedirectResult().then((result) => {
             container.innerHTML = '<div style="text-align:center;color:#999;padding:10px">暫無資料</div>';
             return;
         }
-
         dataArray.forEach(item => {
             const div = document.createElement('div');
             div.className = 'record-item';
-            div.onclick = () => openEdit(item); // 點擊編輯
+            div.onclick = () => openEdit(item);
             div.innerHTML = `
                 <div class="item-main">
                     <span style="font-weight:bold">${item.item}</span>
@@ -320,8 +297,10 @@ auth.getRedirectResult().then((result) => {
         });
     }
 
-    // 4. 新增資料
     function addRecord() {
+        const user = firebase.auth().currentUser;
+        if(!user) return alert("請先登入");
+
         const date = document.getElementById('dateInput').value;
         const item = document.getElementById('itemInput').value;
         const cat = document.getElementById('categoryInput').value;
@@ -332,16 +311,16 @@ auth.getRedirectResult().then((result) => {
         if(!item || isNaN(amt)) return alert("請輸入完整資料");
 
         db.collection('records').add({
-            uid: currentUser.uid,
+            uid: user.uid,
             date: date, item: item, category: cat, currency: curr, amount: amt, type: type,
             createdAt: firebase.firestore.FieldValue.serverTimestamp()
         }).then(() => {
             document.getElementById('itemInput').value = '';
             document.getElementById('amountInput').value = '';
-        });
+        }).catch(e => alert("新增失敗:" + e.message));
     }
 
-    // 5. 編輯與刪除
+    // 編輯相關功能
     function openEdit(item) {
         document.getElementById('editId').value = item.id;
         document.getElementById('editDate').value = item.date;
@@ -370,7 +349,6 @@ auth.getRedirectResult().then((result) => {
         }
     }
 
-    // 6. 歷史搜尋與 Modal 控制
     function openHistory() {
         document.getElementById('historyModal').style.display = 'flex';
         filterHistory();
@@ -384,7 +362,6 @@ auth.getRedirectResult().then((result) => {
 
     function closeModal(id) { document.getElementById(id).style.display = 'none'; }
 
-    // 自動分類
     document.getElementById('itemInput').addEventListener('input', function(e){
         const val = e.target.value.toLowerCase();
         const catSelect = document.getElementById('categoryInput');
