@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>Kawaii 雲端記帳本</title>
+    
+    <!-- Firebase 核心 -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;700&family=Noto+Sans+TC:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root { --primary: #333; --bg: #f4f7f6; --card: #fff; }
+        body { font-family: 'Nunito', 'Noto Sans TC', sans-serif; background: var(--bg); margin: 0; color: #333; -webkit-tap-highlight-color: transparent; padding-bottom: 50px;}
+
+        /* UI 元件樣式 */
+        .btn { border: none; border-radius: 12px; cursor: pointer; font-weight: bold; transition: 0.2s; display: flex; align-items: center; justify-content: center; gap: 5px;}
+        .btn:active { transform: scale(0.96); }
+        .btn-primary { background: var(--primary); color: white; padding: 12px; font-size: 1rem; }
+        .btn-danger { background: #ff7675; color: white; padding: 8px 15px; }
+        .btn-google { background: white; color: #555; box-shadow: 0 4px 10px rgba(0,0,0,0.1); padding: 12px 25px; font-size: 1rem; }
+
+        /* 頁面切換 */
+        #loginPage, #appPage { min-height: 100vh; }
+        #loginPage { display: flex; flex-direction: column; align-items: center; justify-content: center; background: #fff; z-index: 100; position: fixed; top:0; left:0; width:100%;}
+        #appPage { display: none; padding: 20px; max-width: 600px; margin: 0 auto; }
+
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .avatar { width: 40px; height: 40px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 2px 5px rgba(0,0,0,0.1); cursor: pointer; }
+
+        /* 卡片與輸入 */
+        .card { background: var(--card); padding: 20px; border-radius: 16px; margin-bottom: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.03); }
+        input, select { width: 100%; padding: 12px; margin-bottom: 10px; border: 1px solid #eee; border-radius: 10px; box-sizing: border-box; font-size: 16px; background: #fafafa; }
+        input:focus { outline: none; border-color: #888; background: #fff; }
+        
+        /* 自動分類特效 */
+        .auto-highlight { animation: pulse 0.5s; border-color: #ff9a9e; }
+        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(255,154,158,0.7); } 70% { box-shadow: 0 0 0 10px rgba(0,0,0,0); } 100% { box-shadow: 0 0 0 0 rgba(0,0,0,0); } }
+
+        /* 統計 */
+        .stats { display: flex; gap: 10px; margin-bottom: 20px; }
+        .stat-box { flex: 1; background: #fff; padding: 15px; border-radius: 12px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.03); border-bottom: 3px solid #eee; }
+        .stat-val { font-size: 1.2rem; font-weight: bold; margin-top: 5px; }
+        .in-color { color: #00b894; border-color: #00b894; }
+        .out-color { color: #d63031; border-color: #d63031; }
+
+        /* 列表 */
+        .record-item { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #f5f5f5; align-items: center; }
+        .item-main { display: flex; flex-direction: column; }
+        .item-cat { font-size: 0.75rem; background: #eee; padding: 2px 6px; border-radius: 4px; color: #666; width: fit-content; margin-top: 4px;}
+        .price { font-weight: bold; font-size: 1.1rem; }
+        
+        /* 彈窗 Modal */
+        .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 200; display: none; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
+        .modal-box { background: #fff; width: 90%; max-width: 450px; padding: 25px; border-radius: 20px; max-height: 85vh; overflow-y: auto; box-shadow: 0 10px 30px rgba(0,0,0,0.2); position: relative; }
+        .close-icon { position: absolute; top: 15px; right: 20px; font-size: 1.5rem; cursor: pointer; color: #999; }
+        
+        /* 歷史全螢幕 */
+        #historyModal .modal-box { height: 85vh; display: flex; flex-direction: column; }
+        #historyList { flex: 1; overflow-y: auto; margin-top: 10px; }
+    </style>
+</head>
+<body>
+
+<!-- 1. 登入畫面 -->
+<div id="loginPage">
+    <div style="font-size:3rem; margin-bottom:10px;">🐰</div>
+    <h1 style="margin:0 0 30px 0;">Kawaii 記帳本</h1>
+    <button class="btn btn-google" onclick="login()">
+        <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="18" style="margin-right:10px">
+        使用 Google 帳號登入
+    </button>
+</div>
+
+<!-- 2. 主程式畫面 -->
+<div id="appPage">
+    <div class="header">
+        <h2 style="margin:0">我的錢包</h2>
+        <img id="userAvatar" class="avatar" src="" onclick="logout()">
+    </div>
+
+    <!-- 統計區 -->
+    <div class="stats">
+        <div class="stat-box in-color">
+            <small>本月收入</small>
+            <div class="stat-val" id="monthIn">0</div>
+        </div>
+        <div class="stat-box out-color">
+            <small>本月支出</small>
+            <div class="stat-val" id="monthOut">0</div>
+        </div>
+    </div>
+
+    <!-- 記帳輸入區 -->
+    <div class="card">
+        <div style="display:grid; grid-template-columns: 1.5fr 1fr; gap:10px;">
+            <input type="date" id="dateInput">
+            <select id="currencyInput">
+                <option value="TWD">台幣</option>
+                <option value="USD">美金</option>
+                <option value="JPY">日圓</option>
+                <option value="CNY">人民幣</option>
+            </select>
+        </div>
+        
+        <input type="text" id="itemInput" placeholder="輸入項目 (自動分類)">
+        <select id="categoryInput">
+            <option value="飲食">🍱 飲食</option>
+            <option value="交通">🚗 交通</option>
+            <option value="購物">🎁 購物</option>
+            <option value="娛樂">🎮 娛樂</option>
+            <option value="居住">🏠 居住</option>
+            <option value="薪水">💰 薪水</option>
+            <option value="其他">🌈 其他</option>
+        </select>
+
+        <div style="display:flex; gap:10px;">
+            <select id="typeInput" style="width: 100px;">
+                <option value="expense">支出</option>
+                <option value="income">收入</option>
+            </select>
+            <input type="number" id="amountInput" placeholder="金額" style="flex:1">
+        </div>
+
+        <button class="btn btn-primary" style="width:100%" onclick="addRecord()">✨ 記下一筆</button>
+    </div>
+
+    <!-- 近期列表 -->
+    <div style="display:flex; justify-content:space-between; align-items:center; margin: 10px 5px;">
+        <h3>近期紀錄</h3>
+        <button class="btn" style="background:#eee; padding:5px 10px; font-size:0.8rem;" onclick="openHistory()">查看全部</button>
+    </div>
+    <div class="card" id="recentList" style="min-height:100px;">載入中...</div>
+
+</div>
+
+<!-- 3. 編輯視窗 -->
+<div id="editModal" class="modal">
+    <div class="modal-box">
+        <span class="close-icon" onclick="closeModal('editModal')">×</span>
+        <h3>✏️ 編輯紀錄</h3>
+        <input type="hidden" id="editId">
+        <input type="date" id="editDate">
+        <input type="text" id="editItem">
+        <select id="editCategory">
+            <option value="飲食">🍱 飲食</option>
+            <option value="交通">🚗 交通</option>
+            <option value="購物">🎁 購物</option>
+            <option value="娛樂">🎮 娛樂</option>
+            <option value="居住">🏠 居住</option>
+            <option value="薪水">💰 薪水</option>
+            <option value="其他">🌈 其他</option>
+        </select>
+        <div style="display:flex; gap:10px;">
+             <select id="editCurrency" style="width:80px">
+                <option value="TWD">台幣</option>
+                <option value="USD">美金</option>
+                <option value="JPY">日圓</option>
+            </select>
+            <input type="number" id="editAmount">
+        </div>
+        
+        <div style="display:flex; gap:10px; margin-top:15px;">
+            <button class="btn btn-danger" onclick="deleteFromEdit()">刪除</button>
+            <button class="btn btn-primary" style="flex:1" onclick="saveEdit()">儲存</button>
+        </div>
+    </div>
+</div>
+
+<!-- 4. 歷史紀錄視窗 -->
+<div id="historyModal" class="modal">
+    <div class="modal-box">
+        <span class="close-icon" onclick="closeModal('historyModal')">×</span>
+        <h3>📜 所有紀錄</h3>
+        <input type="text" id="searchHistory" placeholder="🔍 搜尋項目或日期..." oninput="filterHistory()">
+        <div id="historyList"></div>
+    </div>
+</div>
+
+<script>
+    // ⚠️⚠️⚠️ 第 3 步：請將你在 Firebase 複製的設定貼在下方 ⚠️⚠️⚠️
+    const firebaseConfig = {
+        // Import the functions you need from the SDKs you need
+import { initializeApp } from "firebase/app";
+import { getAnalytics } from "firebase/analytics";
+// TODO: Add SDKs for Firebase products that you want to use
+// https://firebase.google.com/docs/web/setup#available-libraries
+
+// Your web app's Firebase configuration
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+const firebaseConfig = {
+  apiKey: "AIzaSyDT_5fDqMEKU7fsGJdnJh3ABocxGYU0qrs",
+  authDomain: "keepaccounting.firebaseapp.com",
+  projectId: "keepaccounting",
+  storageBucket: "keepaccounting.firebasestorage.app",
+  messagingSenderId: "689155194970",
+  appId: "1:689155194970:web:92b5fc042188578fed5863",
+  measurementId: "G-X1VKGS5RQG"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
+    };
+    // ⚠️⚠️⚠️ 設定結束 ⚠️⚠️⚠️
+
+    // 初始化
+    if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+    let currentUser = null;
+    let unsubscribe = null;
+    let allRecords = []; // 本地暫存所有紀錄 (搜尋用)
+    
+    // 關鍵字設定
+    const keywords = {
+        '飲食': ['飯','麵','吃','喝','餐','茶','咖啡','麥當勞','肯德基','飲料'],
+        '交通': ['車','捷運','油','高鐵','悠遊卡','uber'],
+        '購物': ['買','衣','鞋','包','衛生紙','蝦皮'],
+        '娛樂': ['玩','戲','影','遊戲','switch','netflix'],
+        '居住': ['房租','電','水','瓦斯','網路'],
+        '薪水': ['薪','獎金']
+    };
+
+    // 1. 監聽登入狀態
+    auth.onAuthStateChanged(user => {
+        if(user) {
+            currentUser = user;
+            document.getElementById('loginPage').style.display = 'none';
+            document.getElementById('appPage').style.display = 'block';
+            document.getElementById('userAvatar').src = user.photoURL;
+            document.getElementById('dateInput').valueAsDate = new Date();
+            loadData(); // 啟動資料監聽
+        } else {
+            document.getElementById('loginPage').style.display = 'flex';
+            document.getElementById('appPage').style.display = 'none';
+        }
+    });
+
+    function login() { auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()); }
+    function logout() { if(confirm("登出？")) auth.signOut(); }
+
+    // 2. 資料庫即時監聽 (核心功能)
+    function loadData() {
+        if(unsubscribe) unsubscribe();
+        // 抓取該用戶所有資料
+        unsubscribe = db.collection('records')
+            .where('uid', '==', currentUser.uid)
+            .orderBy('date', 'desc')
+            .orderBy('createdAt', 'desc')
+            .onSnapshot(snapshot => {
+                allRecords = [];
+                let mIn = 0, mOut = 0;
+                const now = new Date(); 
+                const thisMonth = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
+
+                // 處理資料
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    data.id = doc.id; // 綁定 ID 方便之後編輯
+                    allRecords.push(data);
+
+                    // 簡易統計本月 (不換算匯率，直接加總該數字，可依需求修改)
+                    if(data.date.startsWith(thisMonth)) {
+                        if(data.type === 'income') mIn += data.amount;
+                        else mOut += data.amount;
+                    }
+                });
+
+                // 更新 UI
+                document.getElementById('monthIn').innerText = mIn.toLocaleString();
+                document.getElementById('monthOut').innerText = mOut.toLocaleString();
+                renderList(allRecords.slice(0, 20), 'recentList'); // 首頁只顯示最新的 20 筆
+                
+                // 如果歷史視窗開著，也要更新
+                if(document.getElementById('historyModal').style.display === 'flex') {
+                    filterHistory();
+                }
+            });
+    }
+
+    // 3. 渲染列表 (共用函數)
+    function renderList(dataArray, elementId) {
+        const container = document.getElementById(elementId);
+        container.innerHTML = '';
+        if(dataArray.length === 0) {
+            container.innerHTML = '<div style="text-align:center;color:#999;padding:10px">暫無資料</div>';
+            return;
+        }
+
+        dataArray.forEach(item => {
+            const div = document.createElement('div');
+            div.className = 'record-item';
+            div.onclick = () => openEdit(item); // 點擊編輯
+            div.innerHTML = `
+                <div class="item-main">
+                    <span style="font-weight:bold">${item.item}</span>
+                    <span style="font-size:0.8rem; color:#999">${item.date}</span>
+                    <span class="item-cat">${item.category}</span>
+                </div>
+                <div class="price ${item.type==='income'?'in-color':'out-color'}">
+                    ${item.type==='income'?'+':'-'} ${item.currency} ${item.amount}
+                </div>
+            `;
+            container.appendChild(div);
+        });
+    }
+
+    // 4. 新增資料
+    function addRecord() {
+        const date = document.getElementById('dateInput').value;
+        const item = document.getElementById('itemInput').value;
+        const cat = document.getElementById('categoryInput').value;
+        const curr = document.getElementById('currencyInput').value;
+        const amt = parseFloat(document.getElementById('amountInput').value);
+        const type = document.getElementById('typeInput').value;
+
+        if(!item || isNaN(amt)) return alert("請輸入完整資料");
+
+        db.collection('records').add({
+            uid: currentUser.uid,
+            date: date, item: item, category: cat, currency: curr, amount: amt, type: type,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        }).then(() => {
+            document.getElementById('itemInput').value = '';
+            document.getElementById('amountInput').value = '';
+        });
+    }
+
+    // 5. 編輯與刪除
+    function openEdit(item) {
+        document.getElementById('editId').value = item.id;
+        document.getElementById('editDate').value = item.date;
+        document.getElementById('editItem').value = item.item;
+        document.getElementById('editCategory').value = item.category;
+        document.getElementById('editCurrency').value = item.currency;
+        document.getElementById('editAmount').value = item.amount;
+        document.getElementById('editModal').style.display = 'flex';
+    }
+
+    function saveEdit() {
+        const id = document.getElementById('editId').value;
+        db.collection('records').doc(id).update({
+            date: document.getElementById('editDate').value,
+            item: document.getElementById('editItem').value,
+            category: document.getElementById('editCategory').value,
+            currency: document.getElementById('editCurrency').value,
+            amount: parseFloat(document.getElementById('editAmount').value)
+        }).then(() => closeModal('editModal'));
+    }
+
+    function deleteFromEdit() {
+        if(confirm("確定刪除？")) {
+            db.collection('records').doc(document.getElementById('editId').value).delete();
+            closeModal('editModal');
+        }
+    }
+
+    // 6. 歷史搜尋與 Modal 控制
+    function openHistory() {
+        document.getElementById('historyModal').style.display = 'flex';
+        filterHistory();
+    }
+    
+    function filterHistory() {
+        const text = document.getElementById('searchHistory').value.toLowerCase();
+        const filtered = allRecords.filter(r => r.item.toLowerCase().includes(text) || r.date.includes(text) || r.category.includes(text));
+        renderList(filtered, 'historyList');
+    }
+
+    function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+
+    // 自動分類
+    document.getElementById('itemInput').addEventListener('input', function(e){
+        const val = e.target.value.toLowerCase();
+        const catSelect = document.getElementById('categoryInput');
+        for(const [cat, kws] of Object.entries(keywords)){
+            if(kws.some(k => val.includes(k))){
+                if(catSelect.value !== cat) {
+                    catSelect.value = cat;
+                    catSelect.classList.remove('auto-highlight');
+                    void catSelect.offsetWidth;
+                    catSelect.classList.add('auto-highlight');
+                }
+                break;
+            }
+        }
+    });
+</script>
+</body>
+</html>
