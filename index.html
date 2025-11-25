@@ -230,7 +230,18 @@
                 alert("登入錯誤: " + error.message);
             });
     }
-
+// 🕵️‍♂️ 偵探程式碼：專門抓 redirect 回來後的錯誤
+    auth.getRedirectResult().then((result) => {
+        if (result.user) {
+            console.log("偵探回報：登入成功！", result.user);
+        } else {
+            console.log("偵探回報：沒有使用者資料 (可能是還沒按登入)");
+        }
+    }).catch((error) => {
+        // 🚨 這裡會告訴你真正的錯誤原因！
+        alert("登入失敗原因：" + error.message);
+        console.error(error);
+    });
     function logout() { if(confirm("登出？")) auth.signOut(); }
 
     // --- 記帳邏輯 ---
