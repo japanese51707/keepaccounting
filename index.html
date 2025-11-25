@@ -181,32 +181,35 @@
 </div>
 
 <script>
-    // ▼▼▼ 請小心填入你的 Firebase 設定，確保格式跟這裡長得一樣 ▼▼▼
-    const firebaseConfig = {
-  apiKey: "AIzaSyDT_5fDqMEKU7fsGJdnJh3ABocxGYU0qrs",
-  authDomain: "keepaccounting.firebaseapp.com",
-  projectId: "keepaccounting",
-  storageBucket: "keepaccounting.firebasestorage.app",
-  messagingSenderId: "689155194970",
-  appId: "1:689155194970:web:92b5fc042188578fed5863",
-  measurementId: "G-X1VKGS5RQG"
+    // 🛡️ 防護罩：如果程式碼有語法錯誤，直接跳窗告訴你是哪一行
+    window.onerror = function(message, source, lineno, colno, error) {
+        alert("程式碼在第 " + lineno + " 行發生錯誤！\n原因：" + message);
     };
-    // ▲▲▲ 設定結束，請檢查上面的 } 和 ; 有沒有在 ▲▲▲
 
-    // 初始化 Firebase (這段不要動)
+    // ▼▼▼ Firebase 設定 (已幫你淨化格式) ▼▼▼
+    const firebaseConfig = {
+        apiKey: "AIzaSyDT_5fDqMEKU7fsGJdnJh3ABocxGYU0qrs",
+        authDomain: "keepaccounting.firebaseapp.com",
+        projectId: "keepaccounting",
+        storageBucket: "keepaccounting.firebasestorage.app",
+        messagingSenderId: "689155194970",
+        appId: "1:689155194970:web:92b5fc042188578fed5863"
+    };
+    // ▲▲▲ 設定結束 ▲▲▲
+
+    // 初始化 Firebase
     if (!firebase.apps.length) {
         firebase.initializeApp(firebaseConfig);
     }
     const auth = firebase.auth();
     const db = firebase.firestore();
 
-    // 除錯用：確認程式碼有跑過這裡
-    console.log("Firebase 初始化成功，login 功能已準備就緒");
+    console.log("Firebase 初始化成功");
 
     // 1. 監聽登入狀態
     auth.onAuthStateChanged(user => {
         if(user) {
-            console.log("已偵測到使用者登入:", user.email);
+            console.log("使用者已登入:", user.email);
             document.getElementById('loginPage').style.display = 'none';
             document.getElementById('appPage').style.display = 'block';
             document.getElementById('userAvatar').src = user.photoURL;
@@ -219,28 +222,24 @@
         }
     });
 
-    // 2. 登入功能 (修正版：加入錯誤回報)
+    // 2. 登入功能
     function login() { 
-        console.log("按鈕被按下了！正在呼叫 Google 登入...");
-        
-        // 使用 Redirect 比較不會被 Safari 擋
+        console.log("嘗試登入...");
         auth.signInWithRedirect(new firebase.auth.GoogleAuthProvider())
             .catch(error => {
-                alert("登入發生錯誤: " + error.message);
-                console.error("登入錯誤:", error);
+                alert("登入錯誤: " + error.message);
             });
     }
 
     function logout() { if(confirm("登出？")) auth.signOut(); }
 
-    // 下面是原本的記帳邏輯，不用動
+    // --- 記帳邏輯 ---
     let currentUser = null;
     let unsubscribe = null;
     let allRecords = []; 
     const keywords = {'飲食':['飯','麵','吃','喝'],'交通':['車','捷運'],'購物':['買','衣'],'娛樂':['玩','遊戲'],'居住':['房','電'],'薪水':['薪']};
 
     function loadData() {
-        // 取得當前用戶
         const user = firebase.auth().currentUser;
         if (!user) return;
 
@@ -320,7 +319,7 @@
         }).catch(e => alert("新增失敗:" + e.message));
     }
 
-    // 編輯相關功能
+    // 編輯與歷史功能
     function openEdit(item) {
         document.getElementById('editId').value = item.id;
         document.getElementById('editDate').value = item.date;
